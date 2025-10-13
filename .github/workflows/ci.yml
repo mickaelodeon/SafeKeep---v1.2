@@ -1,0 +1,309 @@
+name: SafeKeep CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  # PHP Code Quality and Testing
+  php-tests:
+    name: PHP Tests & Code Quality
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        php-version: [8.0, 8.1, 8.2]
+    
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: password
+          MYSQL_DATABASE: safekeep_test
+        ports:
+          - 3306:3306
+        options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=3
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup PHP ${{ matrix.php-version }}
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: ${{ matrix.php-version }}
+        extensions: pdo, pdo_mysql, gd, fileinfo, mbstring
+        coverage: xdebug
+        tools: composer:v2
+
+    - name: Get Composer Cache Directory
+      id: composer-cache
+      run: echo "dir=$(composer config cache-files-dir)" >> $GITHUB_OUTPUT
+
+    - name: Cache Composer dependencies
+      uses: actions/cache@v3
+      with:
+        path: ${{ steps.composer-cache.outputs.dir }}
+        key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}
+        restore-keys: ${{ runner.os }}-composer-
+
+    - name: Install Composer dependencies
+      run: composer install --prefer-dist --no-progress --no-suggest --optimize-autoloader
+
+    - name: Copy environment file
+      run: cp .env.example .env
+
+    - name: Update environment for testing
+      run: |
+        sed -i 's/DB_HOST=localhost/DB_HOST=127.0.0.1/' .env
+        sed -i 's/DB_NAME=safekeep_db/DB_NAME=safekeep_test/' .env
+        sed -i 's/DB_USER=root/DB_USER=root/' .env
+        sed -i 's/DB_PASS=/DB_PASS=password/' .env
+        sed -i 's/APP_ENV=development/APP_ENV=testing/' .env
+
+    - name: Wait for MySQL
+      run: |
+        while ! mysqladmin ping -h"127.0.0.1" -P"3306" -uroot -ppassword --silent; do
+          sleep 1
+        done
+
+    - name: Setup database
+      run: |
+        mysql -h 127.0.0.1 -P 3306 -u root -ppassword -e "CREATE DATABASE IF NOT EXISTS safekeep_test;"
+        mysql -h 127.0.0.1 -P 3306 -u root -ppassword safekeep_test < migrations/001_create_tables.sql
+
+    - name: Run PHP Code Sniffer
+      run: vendor/bin/phpcs --standard=PSR12 --extensions=php --ignore=vendor/ .
+
+    - name: Run PHPUnit tests
+      run: vendor/bin/phpunit --coverage-clover=coverage.xml
+
+    - name: Upload coverage reports to Codecov
+      if: matrix.php-version == '8.1'
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        flags: unittests
+        name: codecov-umbrella
+
+  # Security Analysis
+  security-analysis:
+    name: Security Analysis
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup PHP
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: 8.1
+        tools: composer:v2
+
+    - name: Install dependencies
+      run: composer install --prefer-dist --no-progress
+
+    # Security vulnerability scanner for PHP dependencies
+    - name: Security Checker
+      run: |
+        composer require --dev enlightn/security-checker
+        vendor/bin/security-checker security:check composer.lock
+
+    # Static analysis with PHPStan
+    - name: PHPStan Static Analysis
+      run: |
+        composer require --dev phpstan/phpstan
+        vendor/bin/phpstan analyse --level=5 includes/ auth/ posts/ admin/
+
+  # Frontend Asset Validation
+  frontend-validation:
+    name: Frontend Validation
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+
+    - name: Install frontend dependencies
+      run: |
+        npm init -y
+        npm install --save-dev eslint prettier stylelint
+
+    - name: Validate CSS
+      run: |
+        npx stylelint "assets/css/*.css"
+
+    - name: Validate JavaScript
+      run: |
+        npx eslint "assets/js/*.js" --ignore-pattern "*.min.js"
+
+    - name: Check file formatting
+      run: |
+        npx prettier --check "assets/js/*.js" "assets/css/*.css"
+
+  # Deployment (only on main branch)
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [php-tests, security-analysis, frontend-validation]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    
+    environment:
+      name: production
+      url: https://safekeep.yourdomain.com
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup PHP
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: 8.1
+        tools: composer:v2
+
+    - name: Install production dependencies
+      run: composer install --no-dev --optimize-autoloader
+
+    - name: Create deployment artifact
+      run: |
+        mkdir -p deployment
+        cp -r . deployment/
+        cd deployment
+        rm -rf .git .github tests/ .env.example
+        tar -czf ../safekeep-${GITHUB_SHA}.tar.gz .
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: safekeep-deployment
+        path: safekeep-${GITHUB_SHA}.tar.gz
+
+    # Example deployment to server via SSH
+    # Uncomment and configure for your deployment target
+    # - name: Deploy to server
+    #   uses: appleboy/ssh-action@v0.1.8
+    #   with:
+    #     host: ${{ secrets.DEPLOY_HOST }}
+    #     username: ${{ secrets.DEPLOY_USER }}
+    #     key: ${{ secrets.DEPLOY_KEY }}
+    #     port: ${{ secrets.DEPLOY_PORT }}
+    #     script: |
+    #       cd /var/www/safekeep
+    #       git pull origin main
+    #       composer install --no-dev --optimize-autoloader
+    #       php artisan migrate --force
+    #       sudo systemctl reload apache2
+
+  # Database Migration Check
+  migration-check:
+    name: Database Migration Validation
+    runs-on: ubuntu-latest
+    
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: password
+          MYSQL_DATABASE: safekeep_migration_test
+        ports:
+          - 3306:3306
+        options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=3
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Wait for MySQL
+      run: |
+        while ! mysqladmin ping -h"127.0.0.1" -P"3306" -uroot -ppassword --silent; do
+          sleep 1
+        done
+
+    - name: Test fresh migration
+      run: |
+        mysql -h 127.0.0.1 -P 3306 -u root -ppassword -e "CREATE DATABASE safekeep_migration_test;"
+        mysql -h 127.0.0.1 -P 3306 -u root -ppassword safekeep_migration_test < migrations/001_create_tables.sql
+
+    - name: Test sample data import
+      run: |
+        mysql -h 127.0.0.1 -P 3306 -u root -ppassword safekeep_migration_test < migrations/002_sample_data.sql
+
+    - name: Validate database structure
+      run: |
+        # Check that all required tables exist
+        mysql -h 127.0.0.1 -P 3306 -u root -ppassword safekeep_migration_test -e "
+        SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES 
+        WHERE TABLE_SCHEMA = 'safekeep_migration_test' 
+        AND TABLE_NAME IN ('users', 'posts', 'announcements', 'categories', 'contact_logs', 'audit_logs', 'rate_limits');"
+
+  # Performance Testing
+  performance-test:
+    name: Performance Testing
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup PHP
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: 8.1
+        extensions: pdo, pdo_mysql, gd, fileinfo
+        tools: composer:v2
+
+    - name: Install dependencies
+      run: composer install --prefer-dist --optimize-autoloader
+
+    - name: PHP Performance Benchmark
+      run: |
+        # Simple benchmark test
+        php -r "
+        \$start = microtime(true);
+        require_once 'includes/config.php';
+        require_once 'includes/db.php';
+        Config::load();
+        \$end = microtime(true);
+        echo 'Config load time: ' . round((\$end - \$start) * 1000, 2) . 'ms' . PHP_EOL;
+        if ((\$end - \$start) > 0.1) exit(1);
+        "
+
+    - name: Memory Usage Check
+      run: |
+        php -d memory_limit=32M -r "
+        require_once 'includes/config.php';
+        require_once 'includes/db.php';
+        require_once 'includes/functions.php';
+        echo 'Memory usage: ' . round(memory_get_peak_usage(true) / 1024 / 1024, 2) . 'MB' . PHP_EOL;
+        if (memory_get_peak_usage(true) > 16 * 1024 * 1024) exit(1);
+        "
+
+  # Notification
+  notify:
+    name: Notify Team
+    runs-on: ubuntu-latest
+    needs: [php-tests, security-analysis, frontend-validation, migration-check]
+    if: always()
+    
+    steps:
+    - name: Notify on success
+      if: ${{ needs.php-tests.result == 'success' && needs.security-analysis.result == 'success' }}
+      run: |
+        echo "✅ All tests passed successfully!"
+        # Add Slack/Discord/Email notification here
+
+    - name: Notify on failure
+      if: ${{ needs.php-tests.result == 'failure' || needs.security-analysis.result == 'failure' }}
+      run: |
+        echo "❌ Tests failed!"
+        # Add failure notification here
