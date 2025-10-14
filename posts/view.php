@@ -43,7 +43,10 @@ $contactError = '';
 $contactSuccess = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['contact_owner'])) {
-    if (!$currentUser) {
+    // Verify CSRF token
+    if (!Security::validateCSRFToken($_POST['csrf_token'] ?? '')) {
+        $contactError = 'Invalid security token. Please try again.';
+    } elseif (!$currentUser) {
         $contactError = 'You must be logged in to contact the owner.';
     } else {
         $message = trim($_POST['message'] ?? '');
@@ -53,12 +56,60 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['contact_owner'])) {
         } elseif (strlen($message) < 10) {
             $contactError = 'Message must be at least 10 characters long.';
         } else {
-            // Here you could implement email notification to the post owner
-            // For now, we'll just show a success message
-            $contactSuccess = 'Your message has been sent to the item owner. They will contact you if interested.';
-            
-            // Log the contact attempt
-            Utils::logAuditAction($currentUser['id'], 'contact_attempt', 'post', $postId);
+            try {
+                // Store the contact attempt in database
+                $contactData = [
+                    'post_id' => $postId,
+                    'sender_user_id' => $currentUser['id'],
+                    'sender_name' => $currentUser['full_name'],
+                    'sender_email' => $currentUser['email'],
+                    'message' => $message,
+                    'ip_address' => $_SERVER['REMOTE_ADDR'] ?? 'unknown',
+                    'email_sent' => 0,
+                    'created_at' => date('Y-m-d H:i:s')
+                ];
+                
+                Database::insert('contact_logs', $contactData);
+                
+                // Try to send email notification to post owner
+                $postOwner = User::findById($post['author_id']);
+                if ($postOwner && $postOwner['email']) {
+                    $emailSubject = "SafeKeep: Someone is interested in your " . ucfirst($post['type']) . " item";
+                    $emailBody = "
+                        <h3>Someone contacted you about your post: " . htmlspecialchars($post['title']) . "</h3>
+                        <p><strong>From:</strong> " . htmlspecialchars($currentUser['full_name']) . " (" . htmlspecialchars($currentUser['email']) . ")</p>
+                        <p><strong>Message:</strong></p>
+                        <div style='background:#f8f9fa; padding:15px; border-left:4px solid #007bff; margin:10px 0;'>
+                            " . nl2br(htmlspecialchars($message)) . "
+                        </div>
+                        <p><strong>Post Details:</strong></p>
+                        <ul>
+                            <li>Title: " . htmlspecialchars($post['title']) . "</li>
+                            <li>Type: " . ucfirst($post['type']) . " Item</li>
+                            <li>Location: " . htmlspecialchars($post['location']) . "</li>
+                            <li>Date: " . Utils::formatDate($post['date_lost_found']) . "</li>
+                        </ul>
+                        <p>You can reply to this email directly to contact the interested person.</p>
+                        <p><a href='" . Config::get('app.url') . "/posts/view.php?id=" . $postId . "'>View your post on SafeKeep</a></p>
+                    ";
+                    
+                    $emailSent = Email::send($postOwner['email'], $emailSubject, $emailBody, true);
+                    
+                    if ($emailSent) {
+                        // Update contact log to mark email as sent
+                        Database::execute("UPDATE contact_logs SET email_sent = 1 WHERE post_id = ? AND sender_user_id = ? ORDER BY created_at DESC LIMIT 1", [$postId, $currentUser['id']]);
+                    }
+                }
+                
+                $contactSuccess = 'Your message has been sent to the item owner. They will receive an email notification and can contact you directly.';
+                
+                // Log the contact attempt for audit
+                Utils::logAuditAction($currentUser['id'], 'contact_attempt', 'post', $postId);
+                
+            } catch (Exception $e) {
+                $contactError = 'Failed to send message. Please try again later.';
+                error_log('Contact form error: ' . $e->getMessage());
+            }
         }
     }
 }
@@ -202,6 +253,7 @@ include '../includes/header.php';
                     </div>
                     <?php else: ?>
                     <form method="POST">
+                        <input type="hidden" name="csrf_token" value="<?php echo Security::generateCSRFToken(); ?>">
                         <div class="mb-3">
                             <label for="message" class="form-label">Your Message</label>
                             <textarea name="message" id="message" class="form-control" rows="4" 

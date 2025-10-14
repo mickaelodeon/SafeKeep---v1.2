@@ -6,6 +6,13 @@
 
 declare(strict_types=1);
 
+// Include Composer autoloader for PHPMailer
+require_once __DIR__ . '/../vendor/autoload.php';
+
+use PHPMailer\PHPMailer\PHPMailer;
+use PHPMailer\PHPMailer\SMTP;
+use PHPMailer\PHPMailer\Exception;
+
 class Email
 {
     private static array $config;
@@ -67,7 +74,7 @@ class Email
      */
     private static function sendWithPHPMailer(string $to, string $subject, string $body, bool $isHtml): bool
     {
-        $mail = new PHPMailer\PHPMailer\PHPMailer(true);
+        $mail = new PHPMailer(true);
 
         try {
             // Server settings
