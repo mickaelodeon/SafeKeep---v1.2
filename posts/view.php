@@ -65,8 +65,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['contact_owner'])) {
                     'sender_email' => $currentUser['email'],
                     'message' => $message,
                     'ip_address' => $_SERVER['REMOTE_ADDR'] ?? 'unknown',
-                    'email_sent' => 0,
-                    'created_at' => date('Y-m-d H:i:s')
+                    'user_agent' => $_SERVER['HTTP_USER_AGENT'] ?? null,
+                    'email_sent' => 0
+                    // Note: sent_at will be auto-populated by database with current_timestamp()
                 ];
                 
                 Database::insert('contact_logs', $contactData);
@@ -97,7 +98,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['contact_owner'])) {
                     
                     if ($emailSent) {
                         // Update contact log to mark email as sent
-                        Database::execute("UPDATE contact_logs SET email_sent = 1 WHERE post_id = ? AND sender_user_id = ? ORDER BY created_at DESC LIMIT 1", [$postId, $currentUser['id']]);
+                        Database::execute("UPDATE contact_logs SET email_sent = 1 WHERE post_id = ? AND sender_user_id = ? ORDER BY sent_at DESC LIMIT 1", [$postId, $currentUser['id']]);
+                    } else {
+                        // Log email error if sending failed
+                        Database::execute("UPDATE contact_logs SET email_error = 'Failed to send email notification' WHERE post_id = ? AND sender_user_id = ? ORDER BY sent_at DESC LIMIT 1", [$postId, $currentUser['id']]);
                     }
                 }
                 
