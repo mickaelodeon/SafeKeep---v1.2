@@ -6,6 +6,8 @@
 
 declare(strict_types=1);
 
+
+
 // Include necessary dependencies without header
 require_once __DIR__ . '/../includes/config.php';
 require_once __DIR__ . '/../includes/functions.php';
@@ -42,12 +44,25 @@ $isAdmin = $currentUser && $currentUser['role'] === 'admin';
 $contactError = '';
 $contactSuccess = '';
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['contact_owner'])) {
+// Check for success message from redirect
+if (isset($_GET['contact']) && $_GET['contact'] === 'success') {
+    if (isset($_GET['email']) && $_GET['email'] === 'sent') {
+        $contactSuccess = 'Your message has been sent successfully! The owner will receive an email notification.';
+    } else {
+        $contactSuccess = 'Your message has been logged successfully! However, email notification failed - the owner can still see your message when they check their posts.';
+    }
+}
+
+// Process contact form submission (check for message field as backup since contact_owner button value sometimes gets lost)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['contact_owner']) || isset($_POST['message']))) {
+    
     // Verify CSRF token
     if (!Security::validateCSRFToken($_POST['csrf_token'] ?? '')) {
         $contactError = 'Invalid security token. Please try again.';
     } elseif (!$currentUser) {
         $contactError = 'You must be logged in to contact the owner.';
+    } elseif ($isOwner) {
+        $contactError = 'You cannot contact yourself about your own post.';
     } else {
         $message = trim($_POST['message'] ?? '');
         
@@ -64,51 +79,171 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['contact_owner'])) {
                     'sender_name' => $currentUser['full_name'],
                     'sender_email' => $currentUser['email'],
                     'message' => $message,
-                    'ip_address' => $_SERVER['REMOTE_ADDR'] ?? 'unknown',
+                    'ip_address' => $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1',
                     'user_agent' => $_SERVER['HTTP_USER_AGENT'] ?? null,
                     'email_sent' => 0
-                    // Note: sent_at will be auto-populated by database with current_timestamp()
                 ];
                 
                 Database::insert('contact_logs', $contactData);
+                $insertId = Database::getConnection()->lastInsertId();
                 
-                // Try to send email notification to post owner
-                $postOwner = User::findById($post['author_id']);
-                if ($postOwner && $postOwner['email']) {
-                    $emailSubject = "SafeKeep: Someone is interested in your " . ucfirst($post['type']) . " item";
-                    $emailBody = "
-                        <h3>Someone contacted you about your post: " . htmlspecialchars($post['title']) . "</h3>
-                        <p><strong>From:</strong> " . htmlspecialchars($currentUser['full_name']) . " (" . htmlspecialchars($currentUser['email']) . ")</p>
-                        <p><strong>Message:</strong></p>
-                        <div style='background:#f8f9fa; padding:15px; border-left:4px solid #007bff; margin:10px 0;'>
-                            " . nl2br(htmlspecialchars($message)) . "
-                        </div>
-                        <p><strong>Post Details:</strong></p>
-                        <ul>
-                            <li>Title: " . htmlspecialchars($post['title']) . "</li>
-                            <li>Type: " . ucfirst($post['type']) . " Item</li>
-                            <li>Location: " . htmlspecialchars($post['location']) . "</li>
-                            <li>Date: " . Utils::formatDate($post['date_lost_found']) . "</li>
-                        </ul>
-                        <p>You can reply to this email directly to contact the interested person.</p>
-                        <p><a href='" . Config::get('app.url') . "/posts/view.php?id=" . $postId . "'>View your post on SafeKeep</a></p>
-                    ";
+                // Try to send email
+                $emailSent = false;
+                try {
+                    $postOwner = User::findById($post['author_id']);
                     
-                    $emailSent = Email::send($postOwner['email'], $emailSubject, $emailBody, true);
-                    
-                    if ($emailSent) {
-                        // Update contact log to mark email as sent
-                        Database::execute("UPDATE contact_logs SET email_sent = 1 WHERE post_id = ? AND sender_user_id = ? ORDER BY sent_at DESC LIMIT 1", [$postId, $currentUser['id']]);
-                    } else {
-                        // Log email error if sending failed
-                        Database::execute("UPDATE contact_logs SET email_error = 'Failed to send email notification' WHERE post_id = ? AND sender_user_id = ? ORDER BY sent_at DESC LIMIT 1", [$postId, $currentUser['id']]);
+                    if ($postOwner && !empty($postOwner['email'])) {
+                        if (!class_exists('Email')) {
+                            require_once __DIR__ . '/../includes/Email.php';
+                        }
+                        
+                        $emailSubject = "🔍 SafeKeep Alert: Someone is interested in your " . ucfirst($post['type']) . " item";
+                        
+                        // Create professional HTML email
+                        $emailBody = '
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SafeKeep Contact Notification</title>
+</head>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+    
+    <!-- Header -->
+    <div style="background: linear-gradient(135deg, #007bff, #0056b3); color: white; padding: 20px; border-radius: 8px 8px 0 0; text-align: center;">
+        <h1 style="margin: 0; font-size: 24px;">🔍 SafeKeep</h1>
+        <p style="margin: 5px 0 0 0; opacity: 0.9;">Lost & Found Community</p>
+    </div>
+    
+    <!-- Main Content -->
+    <div style="background: #fff; border: 1px solid #e0e0e0; border-top: none; border-radius: 0 0 8px 8px; padding: 30px;">
+        
+        <!-- Alert Banner -->
+        <div style="background: #e7f3ff; border-left: 4px solid #007bff; padding: 15px; margin-bottom: 25px; border-radius: 4px;">
+            <h2 style="margin: 0 0 10px 0; color: #007bff; font-size: 20px;">
+                📧 Someone contacted you about your item!
+            </h2>
+            <p style="margin: 0; color: #555;">
+                You have received a new message regarding your <strong>' . htmlspecialchars($post['type']) . '</strong> post.
+            </p>
+        </div>
+        
+        <!-- Post Details -->
+        <div style="background: #f8f9fa; padding: 20px; border-radius: 6px; margin-bottom: 25px;">
+            <h3 style="margin: 0 0 15px 0; color: #333; border-bottom: 2px solid #007bff; padding-bottom: 8px;">
+                📋 Your Post Details
+            </h3>
+            <table style="width: 100%; border-collapse: collapse;">
+                <tr>
+                    <td style="padding: 8px 0; color: #666; font-weight: bold; width: 100px;">Title:</td>
+                    <td style="padding: 8px 0; color: #333;">' . htmlspecialchars($post['title']) . '</td>
+                </tr>
+                <tr>
+                    <td style="padding: 8px 0; color: #666; font-weight: bold;">Type:</td>
+                    <td style="padding: 8px 0;">
+                        <span style="background: ' . ($post['type'] === 'lost' ? '#dc3545' : '#28a745') . '; color: white; padding: 3px 8px; border-radius: 12px; font-size: 12px; text-transform: uppercase;">
+                            ' . ($post['type'] === 'lost' ? '❌ Lost' : '✅ Found') . '
+                        </span>
+                    </td>
+                </tr>
+                <tr>
+                    <td style="padding: 8px 0; color: #666; font-weight: bold;">Location:</td>
+                    <td style="padding: 8px 0; color: #333;">📍 ' . htmlspecialchars($post['location']) . '</td>
+                </tr>
+                <tr>
+                    <td style="padding: 8px 0; color: #666; font-weight: bold;">Date:</td>
+                    <td style="padding: 8px 0; color: #333;">📅 ' . date('F j, Y', strtotime($post['date_lost_found'])) . '</td>
+                </tr>
+            </table>
+        </div>
+        
+        <!-- Contact Information -->
+        <div style="background: #fff3cd; border: 1px solid #ffeaa7; padding: 20px; border-radius: 6px; margin-bottom: 25px;">
+            <h3 style="margin: 0 0 15px 0; color: #856404;">
+                👤 Message From:
+            </h3>
+            <p style="margin: 0 0 10px 0; font-size: 16px;">
+                <strong>' . htmlspecialchars($currentUser['full_name']) . '</strong>
+            </p>
+            <p style="margin: 0; color: #666;">
+                📧 <a href="mailto:' . htmlspecialchars($currentUser['email']) . '" style="color: #007bff; text-decoration: none;">' . htmlspecialchars($currentUser['email']) . '</a>
+            </p>
+        </div>
+        
+        <!-- Message Content -->
+        <div style="background: #f8f9fa; border-left: 4px solid #28a745; padding: 20px; margin-bottom: 30px;">
+            <h3 style="margin: 0 0 15px 0; color: #28a745;">💬 Their Message:</h3>
+            <div style="background: white; padding: 15px; border-radius: 6px; border: 1px solid #e0e0e0; font-style: italic; line-height: 1.7;">
+                "' . nl2br(htmlspecialchars($message)) . '"
+            </div>
+        </div>
+        
+        <!-- Action Buttons -->
+        <div style="text-align: center; margin-bottom: 30px;">
+            <a href="mailto:' . htmlspecialchars($currentUser['email']) . '?subject=Re: SafeKeep - ' . htmlspecialchars($post['title']) . '" 
+               style="display: inline-block; background: #28a745; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold; margin: 0 10px 10px 0;">
+                📧 Reply via Email
+            </a>
+            <a href="' . Config::get('app.url') . '/posts/view.php?id=' . $postId . '" 
+               style="display: inline-block; background: #007bff; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold; margin: 0 10px 10px 0;">
+                👀 View Your Post
+            </a>
+        </div>
+        
+        <!-- Tips -->
+        <div style="background: #d1ecf1; border: 1px solid #bee5eb; padding: 15px; border-radius: 6px; margin-bottom: 20px;">
+            <h4 style="margin: 0 0 10px 0; color: #0c5460;">💡 Safety Tips:</h4>
+            <ul style="margin: 0; padding-left: 20px; color: #0c5460;">
+                <li>Meet in public places when exchanging lost items</li>
+                <li>Verify ownership by asking specific questions about the item</li>
+                <li>Trust your instincts - if something feels wrong, prioritize your safety</li>
+            </ul>
+        </div>
+    </div>
+    
+    <!-- Footer -->
+    <div style="text-align: center; padding: 20px; color: #666; font-size: 12px; border-top: 1px solid #e0e0e0;">
+        <p style="margin: 0 0 10px 0;">
+            This email was sent by <strong>SafeKeep Lost & Found System</strong><br>
+            Helping reunite people with their lost belongings 💙
+        </p>
+        <p style="margin: 0; opacity: 0.7;">
+            <a href="' . Config::get('app.url') . '" style="color: #007bff; text-decoration: none;">Visit SafeKeep</a> | 
+            <a href="' . Config::get('app.url') . '/posts/browse.php" style="color: #007bff; text-decoration: none;">Browse Posts</a>
+        </p>
+    </div>
+    
+</body>
+</html>';
+                        
+                        $emailSent = Email::send($postOwner['email'], $emailSubject, $emailBody, true);
+                        
+                        if ($emailSent) {
+                            Database::execute("UPDATE contact_logs SET email_sent = 1 WHERE id = ?", [$insertId]);
+                        } else {
+                            Database::execute("UPDATE contact_logs SET email_sent = 0, email_error = 'Email send failed' WHERE id = ?", [$insertId]);
+                        }
                     }
+                    
+                } catch (Exception $e) {
+                    error_log('SafeKeep: Email error - ' . $e->getMessage());
                 }
                 
-                $contactSuccess = 'Your message has been sent to the item owner. They will receive an email notification and can contact you directly.';
+                if ($emailSent) {
+                    $contactSuccess = 'Your message has been sent successfully! The owner will receive an email notification.';
+                } else {
+                    $contactSuccess = 'Your message has been logged successfully! However, email notification failed - the owner can still see your message when they check their posts.';
+                }
                 
-                // Log the contact attempt for audit
-                Utils::logAuditAction($currentUser['id'], 'contact_attempt', 'post', $postId);
+                // Redirect to prevent form resubmission and show success message
+                $redirectUrl = Config::get('app.url') . '/posts/view.php?id=' . $postId . '&contact=success';
+                if ($emailSent) {
+                    $redirectUrl .= '&email=sent';
+                } else {
+                    $redirectUrl .= '&email=failed';
+                }
+                Utils::redirect($redirectUrl);
                 
             } catch (Exception $e) {
                 $contactError = 'Failed to send message. Please try again later.';
