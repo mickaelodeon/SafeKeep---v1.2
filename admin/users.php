@@ -28,16 +28,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && Security::validateCSRFToken($_POST[
     try {
         switch ($action) {
             case 'activate':
-                if (Database::update('users', ['is_active' => 1], 'id = ?', [$userId])) {
+                // When admin activates a user, also verify their email automatically
+                if (Database::update('users', [
+                    'is_active' => 1, 
+                    'email_verified' => 1,
+                    'updated_at' => date('Y-m-d H:i:s')
+                ], 'id = ?', [$userId])) {
                     Utils::logAuditAction($adminId, 'ACTIVATE_USER', 'users', $userId);
-                    Utils::redirect($_SERVER['PHP_SELF'], 'User activated successfully.', 'success');
+                    Utils::redirect($_SERVER['PHP_SELF'], 'User activated successfully and email verified.', 'success');
                 } else {
                     $error = 'Failed to activate user.';
                 }
                 break;
 
             case 'deactivate':
-                if (Database::update('users', ['is_active' => 0], 'id = ?', [$userId])) {
+                // When admin deactivates a user, keep email_verified status but set inactive
+                if (Database::update('users', [
+                    'is_active' => 0,
+                    'updated_at' => date('Y-m-d H:i:s')
+                ], 'id = ?', [$userId])) {
                     Utils::logAuditAction($adminId, 'DEACTIVATE_USER', 'users', $userId);
                     Utils::redirect($_SERVER['PHP_SELF'], 'User deactivated successfully.', 'success');
                 } else {
