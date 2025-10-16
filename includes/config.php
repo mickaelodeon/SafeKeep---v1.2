@@ -50,9 +50,9 @@ class Config
         self::$config = [
             'database' => [
                 'host' => self::env('DB_HOST', self::env('MYSQLHOST', self::env('RAILWAY_PRIVATE_DOMAIN', 'localhost'))),
-                'name' => self::env('DB_NAME', self::env('MYSQL_DATABASE', 'safekeep_db')),
+                'name' => self::env('DB_NAME', self::env('MYSQL_DATABASE', self::env('MYSQLDATABASE', 'railway'))),
                 'user' => self::env('DB_USER', self::env('MYSQLUSER', 'root')),
-                'pass' => self::env('DB_PASS', self::env('MYSQL_ROOT_PASSWORD', self::env('MYSQLPASSWORD', ''))),
+                'pass' => self::env('DB_PASS', self::env('MYSQL_ROOT_PASSWORD', self::env('MYSQLPASSWORD', 'rGqvfLQjfcUqCvlxBTWxlwwNgXMEjVvm'))),
                 'charset' => 'utf8mb4'
             ],
             'mail' => [
