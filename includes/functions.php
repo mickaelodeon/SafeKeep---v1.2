@@ -278,7 +278,7 @@ class Session
             ini_set('session.cookie_samesite', 'Lax');
             ini_set('session.use_strict_mode', '1');
             ini_set('session.gc_maxlifetime', (string)$config['session_lifetime']);
-            ini_set('session.cookie_path', '/safekeep-v2/');
+            ini_set('session.cookie_path', '/');
             
             session_name($config['session_name']);
             session_start();
