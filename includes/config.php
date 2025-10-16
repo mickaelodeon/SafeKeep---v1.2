@@ -46,7 +46,7 @@ class Config
             }
         }
 
-        // Set default configuration
+        // Set default configuration with proper environment variable precedence
         self::$config = [
             'database' => [
                 'host' => self::env('DB_HOST', self::env('MYSQLHOST', self::env('RAILWAY_PRIVATE_DOMAIN', 'localhost'))),
@@ -68,9 +68,9 @@ class Config
             ],
             'app' => [
                 'name' => self::env('APP_NAME', 'SafeKeep'),
-                'url' => self::env('APP_URL', 'http://localhost/safekeep'),
-                'env' => self::env('APP_ENV', 'development'),
-                'debug' => self::env('APP_DEBUG', 'true') === 'true'
+                'url' => self::env('APP_URL', 'https://safekeep-v12-production.up.railway.app'),
+                'env' => self::env('APP_ENV', 'production'),
+                'debug' => self::env('APP_DEBUG', 'false') === 'true'
             ],
             'security' => [
                 'csrf_secret' => self::env('CSRF_SECRET', 'default-csrf-secret-change-me'),
