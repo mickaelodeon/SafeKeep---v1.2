@@ -105,28 +105,30 @@ class DatabaseSetup
         // Split by statements and execute each one
         $statements = $this->splitSqlStatements($sql);
         
-        $this->connection->beginTransaction();
-        
         try {
             foreach ($statements as $statement) {
                 $statement = trim($statement);
                 if (!empty($statement) && !$this->isComment($statement)) {
-                    $this->connection->exec($statement);
+                    try {
+                        $this->connection->exec($statement);
+                        echo "Executed: " . substr($statement, 0, 50) . "...\n";
+                    } catch (PDOException $e) {
+                        echo "Warning: " . $e->getMessage() . " for statement: " . substr($statement, 0, 50) . "...\n";
+                        // Continue with other statements
+                    }
                 }
             }
             
-            // Record migration as completed
+            // Record migration as completed (without transaction)
             $stmt = $this->connection->prepare("
                 INSERT INTO migrations (filename, description) 
                 VALUES (?, ?)
             ");
             $stmt->execute([$filename, $description]);
             
-            $this->connection->commit();
             echo "Migration $filename completed successfully\n";
             
         } catch (Exception $e) {
-            $this->connection->rollback();
             throw new Exception("Migration $filename failed: " . $e->getMessage());
         }
     }

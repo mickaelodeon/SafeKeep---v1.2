@@ -1,9 +1,6 @@
 -- SafeKeep Database Schema
 -- Migration 001: Create core tables for users, posts, announcements, contact logs, and audit logs
 
-SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
-SET time_zone = "+00:00";
-
 -- Users table
 CREATE TABLE `users` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
@@ -143,5 +140,3 @@ CREATE TABLE `rate_limits` (
   UNIQUE KEY `uk_rate_limit` (`identifier`,`action`),
   KEY `idx_expires_at` (`expires_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-COMMIT;
