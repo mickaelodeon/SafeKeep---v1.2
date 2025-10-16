@@ -20,6 +20,17 @@ try {
     
     echo "<h3>Checking existing categories...</h3>";
     
+    // First, let's check the table structure
+    echo "<h4>Categories table structure:</h4>";
+    $stmt = $db->query("DESCRIBE categories");
+    $columns = $stmt->fetchAll();
+    echo "<table style='border-collapse: collapse; margin: 10px 0;'>";
+    echo "<tr><th style='border: 1px solid #ddd; padding: 5px;'>Column</th><th style='border: 1px solid #ddd; padding: 5px;'>Type</th></tr>";
+    foreach ($columns as $col) {
+        echo "<tr><td style='border: 1px solid #ddd; padding: 5px;'>{$col['Field']}</td><td style='border: 1px solid #ddd; padding: 5px;'>{$col['Type']}</td></tr>";
+    }
+    echo "</table>";
+    
     // Check if categories table exists and has data
     $stmt = $db->query("SELECT COUNT(*) as count FROM categories");
     $result = $stmt->fetch();
@@ -55,12 +66,33 @@ try {
             echo "<p>⚠️ Category '{$category['name']}' already exists - skipped</p>";
             $skippedCount++;
         } else {
-            // Insert new category
-            $stmt = $db->prepare("
-                INSERT INTO categories (name, description, created_at, updated_at) 
-                VALUES (?, ?, NOW(), NOW())
-            ");
-            $stmt->execute([$category['name'], $category['description']]);
+            // Insert new category - check what columns exist first
+            try {
+                // First try with both created_at and updated_at
+                $stmt = $db->prepare("
+                    INSERT INTO categories (name, description, created_at, updated_at) 
+                    VALUES (?, ?, NOW(), NOW())
+                ");
+                $stmt->execute([$category['name'], $category['description']]);
+            } catch (PDOException $e) {
+                if (strpos($e->getMessage(), 'updated_at') !== false) {
+                    // Try without updated_at column
+                    $stmt = $db->prepare("
+                        INSERT INTO categories (name, description, created_at) 
+                        VALUES (?, ?, NOW())
+                    ");
+                    $stmt->execute([$category['name'], $category['description']]);
+                } else if (strpos($e->getMessage(), 'created_at') !== false) {
+                    // Try with just name and description
+                    $stmt = $db->prepare("
+                        INSERT INTO categories (name, description) 
+                        VALUES (?, ?)
+                    ");
+                    $stmt->execute([$category['name'], $category['description']]);
+                } else {
+                    throw $e;
+                }
+            }
             echo "<p>✅ Added category: <strong>{$category['name']}</strong></p>";
             $addedCount++;
         }
@@ -76,23 +108,46 @@ try {
     
     // Display all current categories
     echo "<h3>All Current Categories</h3>";
-    $stmt = $db->query("SELECT id, name, description, created_at FROM categories ORDER BY name");
+    
+    // Check what columns exist for the display
+    $stmt = $db->query("DESCRIBE categories");
+    $tableColumns = $stmt->fetchAll(PDO::FETCH_COLUMN);
+    
+    $hasCreatedAt = in_array('created_at', $tableColumns);
+    $hasDescription = in_array('description', $tableColumns);
+    
+    if ($hasCreatedAt && $hasDescription) {
+        $stmt = $db->query("SELECT id, name, description, created_at FROM categories ORDER BY name");
+    } else if ($hasDescription) {
+        $stmt = $db->query("SELECT id, name, description FROM categories ORDER BY name");
+    } else {
+        $stmt = $db->query("SELECT id, name FROM categories ORDER BY name");
+    }
+    
     $categories = $stmt->fetchAll();
     
     echo "<table style='border-collapse: collapse; width: 100%; margin: 20px 0;'>";
     echo "<tr style='background: #f8f9fa; border: 1px solid #ddd;'>";
     echo "<th style='padding: 10px; border: 1px solid #ddd; text-align: left;'>ID</th>";
     echo "<th style='padding: 10px; border: 1px solid #ddd; text-align: left;'>Name</th>";
-    echo "<th style='padding: 10px; border: 1px solid #ddd; text-align: left;'>Description</th>";
-    echo "<th style='padding: 10px; border: 1px solid #ddd; text-align: left;'>Created</th>";
+    if ($hasDescription) {
+        echo "<th style='padding: 10px; border: 1px solid #ddd; text-align: left;'>Description</th>";
+    }
+    if ($hasCreatedAt) {
+        echo "<th style='padding: 10px; border: 1px solid #ddd; text-align: left;'>Created</th>";
+    }
     echo "</tr>";
     
     foreach ($categories as $cat) {
         echo "<tr>";
         echo "<td style='padding: 10px; border: 1px solid #ddd;'>{$cat['id']}</td>";
         echo "<td style='padding: 10px; border: 1px solid #ddd;'><strong>" . htmlspecialchars($cat['name']) . "</strong></td>";
-        echo "<td style='padding: 10px; border: 1px solid #ddd;'>" . htmlspecialchars($cat['description']) . "</td>";
-        echo "<td style='padding: 10px; border: 1px solid #ddd;'>{$cat['created_at']}</td>";
+        if ($hasDescription) {
+            echo "<td style='padding: 10px; border: 1px solid #ddd;'>" . htmlspecialchars($cat['description'] ?? '') . "</td>";
+        }
+        if ($hasCreatedAt) {
+            echo "<td style='padding: 10px; border: 1px solid #ddd;'>" . ($cat['created_at'] ?? 'N/A') . "</td>";
+        }
         echo "</tr>";
     }
     echo "</table>";
