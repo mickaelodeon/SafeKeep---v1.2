@@ -20,6 +20,14 @@ foreach ($portSources as $source => $value) {
     }
 }
 
+// Debug database environment variables
+echo "\nDatabase environment variables:\n";
+$dbVars = ['MYSQL_HOST', 'MYSQL_DATABASE', 'MYSQL_USER', 'MYSQL_PASSWORD', 'DB_HOST', 'DB_NAME', 'DB_USER', 'DB_PASS'];
+foreach ($dbVars as $var) {
+    $value = getenv($var) ?: $_ENV[$var] ?? null;
+    echo "  $var: " . ($value ? (strlen($value) > 20 ? substr($value, 0, 20) . '...' : $value) : 'not set') . "\n";
+}
+
 // Fallback to 8080 if no port found
 if (!$port) {
     $port = '8080';

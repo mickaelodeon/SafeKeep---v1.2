@@ -2,13 +2,7 @@
 -- Migration 001: Create core tables for users, posts, announcements, contact logs, and audit logs
 
 SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
-SET AUTOCOMMIT = 0;
-START TRANSACTION;
 SET time_zone = "+00:00";
-
--- Create database
-CREATE DATABASE IF NOT EXISTS `safekeep_db` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-USE `safekeep_db`;
 
 -- Users table
 CREATE TABLE `users` (

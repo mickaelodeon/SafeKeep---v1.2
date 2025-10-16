@@ -46,6 +46,9 @@ class Database
                 // Set timezone
                 self::$connection->exec("SET time_zone = '+00:00'");
                 
+                // Auto-setup database if needed (for first run)
+                self::autoSetupDatabase();
+                
             } catch (PDOException $e) {
                 error_log("Database connection failed: " . $e->getMessage());
                 throw new Exception("Database connection failed. Please try again later.");
@@ -205,6 +208,40 @@ class Database
     public static function escapeLike(string $string): string
     {
         return str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $string);
+    }
+    
+    /**
+     * Automatically setup database on first run
+     */
+    private static function autoSetupDatabase(): void
+    {
+        static $setupRun = false;
+        
+        if ($setupRun) {
+            return; // Only run once per request
+        }
+        
+        $setupRun = true;
+        
+        try {
+            require_once __DIR__ . '/DatabaseSetup.php';
+            
+            $setup = new DatabaseSetup(self::$connection);
+            
+            if ($setup->needsSetup()) {
+                error_log("SafeKeep: Database needs setup, running automated setup...");
+                
+                if ($setup->setup()) {
+                    $setup->ensureAdminUser();
+                    error_log("SafeKeep: Database setup completed successfully");
+                } else {
+                    error_log("SafeKeep: Database setup failed");
+                }
+            }
+        } catch (Exception $e) {
+            error_log("SafeKeep: Auto-setup error: " . $e->getMessage());
+            // Don't throw exception here - let the app continue even if setup fails
+        }
     }
 }
 
@@ -374,4 +411,5 @@ class Post
             [$postId]
         ) > 0;
     }
+    
 }
