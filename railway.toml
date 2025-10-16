@@ -4,7 +4,7 @@ version = "2"
 builder = "nixpacks"
 
 [deploy]
-startCommand = "php -S 0.0.0.0:$PORT -t ."
+startCommand = "php launcher.php"
 
 [env]
 # Railway will automatically provide these
