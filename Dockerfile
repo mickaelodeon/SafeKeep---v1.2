@@ -36,11 +36,12 @@ COPY . .
 # Install PHP dependencies
 RUN composer install --no-dev --optimize-autoloader --no-interaction
 
-# Create startup script
-COPY server.php /var/www/html/server.php
+# Copy startup script and make it executable
+COPY start.sh /usr/local/bin/start.sh
+RUN chmod +x /usr/local/bin/start.sh
 
 # Expose port (Railway will set the PORT env var)
 EXPOSE $PORT
 
-# Use our PHP startup script that handles PORT properly
-CMD ["php", "server.php"]
+# Use bash startup script that properly handles PORT environment variable
+CMD ["/usr/local/bin/start.sh"]
