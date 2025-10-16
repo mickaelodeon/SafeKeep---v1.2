@@ -16,6 +16,11 @@ class Security
      */
     public static function generateCSRFToken(): string
     {
+        // Ensure session is started
+        if (session_status() === PHP_SESSION_NONE) {
+            Session::init();
+        }
+        
         if (!isset($_SESSION['csrf_token'])) {
             $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
         }
@@ -27,7 +32,12 @@ class Security
      */
     public static function validateCSRFToken(string $token): bool
     {
-        return isset($_SESSION['csrf_token']) && hash_equals($_SESSION['csrf_token'], $token);
+        // Ensure session is started
+        if (session_status() === PHP_SESSION_NONE) {
+            Session::init();
+        }
+        
+        return !empty($token) && isset($_SESSION['csrf_token']) && hash_equals($_SESSION['csrf_token'], $token);
     }
 
     /**
@@ -272,7 +282,7 @@ class Session
         if (session_status() === PHP_SESSION_NONE) {
             $config = Config::get('security');
             
-            // Configure session settings
+            // Configure session settings for production compatibility
             ini_set('session.cookie_httponly', '1');
             ini_set('session.cookie_secure', isset($_SERVER['HTTPS']) ? '1' : '0');
             ini_set('session.cookie_samesite', 'Lax');
@@ -280,8 +290,15 @@ class Session
             ini_set('session.gc_maxlifetime', (string)$config['session_lifetime']);
             ini_set('session.cookie_path', '/');
             
+            // Use a more compatible session name
             session_name($config['session_name']);
-            session_start();
+            
+            // Start session with error handling
+            if (!session_start()) {
+                // Fallback for environments with session issues
+                ini_set('session.save_handler', 'files');
+                session_start();
+            }
             
             // Regenerate session ID periodically
             if (!isset($_SESSION['last_regeneration'])) {

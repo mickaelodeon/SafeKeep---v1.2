@@ -60,12 +60,21 @@ class Email
             if (class_exists('PHPMailer\\PHPMailer\\PHPMailer')) {
                 return self::sendWithPHPMailer($to, $subject, $body, $isHtml);
             } else {
-                // Fallback to built-in mail() function
-                return self::sendWithBuiltInMail($to, $subject, $body, $isHtml);
+                // Fallback to simple email class
+                require_once __DIR__ . '/SimpleEmail.php';
+                return SimpleEmail::send($to, $subject, $body, $isHtml);
             }
         } catch (Exception $e) {
             error_log('Email sending failed: ' . $e->getMessage());
-            return false;
+            
+            // Try simple email as final fallback
+            try {
+                require_once __DIR__ . '/SimpleEmail.php';
+                return SimpleEmail::send($to, $subject, $body, $isHtml);
+            } catch (Exception $fallbackError) {
+                error_log('Simple email fallback also failed: ' . $fallbackError->getMessage());
+                return false;
+            }
         }
     }
 

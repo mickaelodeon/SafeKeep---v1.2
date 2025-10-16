@@ -3,10 +3,14 @@
 NIXPACKS_PHP_VERSION = "php82"
 
 [phases.setup]
-nixPkgs = ["php82", "nginx", "bash"]
+nixPkgs = ["php82", "nginx", "bash", "composer"]
 
 [phases.install]
-cmds = ["composer install --no-dev --optimize-autoloader"]
+cmds = [
+  "composer --version",
+  "composer install --no-dev --optimize-autoloader --verbose",
+  "ls -la vendor/"
+]
 
 [start]
 cmd = "php launcher.php"
