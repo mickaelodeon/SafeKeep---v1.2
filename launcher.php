@@ -32,6 +32,14 @@ foreach ($dbVars as $var) {
     echo "  $var: " . ($value ? (strlen($value) > 20 ? substr($value, 0, 20) . '...' : $value) : 'not set') . "\n";
 }
 
+// Debug app environment variables
+echo "\nApp environment variables:\n";
+$appVars = ['APP_NAME', 'APP_URL', 'APP_ENV', 'APP_DEBUG'];
+foreach ($appVars as $var) {
+    $value = getenv($var) ?: $_ENV[$var] ?? null;
+    echo "  $var: " . ($value ?: 'not set') . "\n";
+}
+
 // Fallback to 8080 if no port found
 if (!$port) {
     $port = '8080';
