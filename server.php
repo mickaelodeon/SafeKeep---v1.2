@@ -1,50 +1,46 @@
 <?php
-// Enhanced Railway startup script for SafeKeep
+// Railway startup script for SafeKeep Lost & Found System
 
-// Get port from environment variable, default to 8080
-$port = getenv('PORT') ?: '8080';
-
-echo "SafeKeep Lost & Found System - Starting server...\n";
-echo "Port: $port\n";
-echo "Document Root: .\n";
-
-// Create a simple router for better URL handling
-$router = __DIR__ . '/router.php';
-if (!file_exists($router)) {
-    file_put_contents($router, '<?php
-// Simple router for PHP built-in server
-$uri = urldecode(parse_url($_SERVER["REQUEST_URI"], PHP_URL_PATH));
-
-// If file exists and is not a directory, serve it directly
-if ($uri !== "/" && file_exists(__DIR__ . $uri) && !is_dir(__DIR__ . $uri)) {
-    return false;
+// Debug environment variables
+echo "=== SafeKeep Server Startup ===\n";
+echo "PORT environment variable: " . (getenv('PORT') ?: 'not set') . "\n";
+echo "All environment variables:\n";
+foreach ($_ENV as $key => $value) {
+    if (strpos($key, 'PORT') !== false) {
+        echo "  $key = $value\n";
+    }
 }
 
-// Handle posts/view.php with ID parameter
-if (preg_match("/^\/posts\/view\/(\d+)$/", $uri, $matches)) {
-    $_GET["id"] = $matches[1];
-    include __DIR__ . "/posts/view.php";
-    return true;
+// Get port from environment variable with multiple fallbacks
+$port = getenv('PORT') ?: $_ENV['PORT'] ?? $_SERVER['PORT'] ?? '8080';
+
+// Validate port is numeric
+if (!is_numeric($port)) {
+    echo "ERROR: PORT is not numeric: $port\n";
+    echo "Falling back to 8080\n";
+    $port = '8080';
 }
 
-// For other routes, let the application handle naturally
-if (file_exists(__DIR__ . $uri . ".php")) {
-    include __DIR__ . $uri . ".php";
-    return true;
+echo "Using port: $port\n";
+echo "Starting SafeKeep Lost & Found System...\n";
+echo "Document root: " . getcwd() . "\n";
+
+// Simple validation that port is available
+$socket = @fsockopen('127.0.0.1', $port, $errno, $errstr, 1);
+if ($socket) {
+    fclose($socket);
+    echo "WARNING: Port $port appears to be in use\n";
 }
 
-// Default routing
-return false;
-?>');
-}
+// Build the server command without router for simplicity
+$host = '0.0.0.0';
+$docroot = '.';
+$command = "php -S $host:$port -t $docroot";
 
-// Build the command with router
-$command = "php -S 0.0.0.0:$port -t . router.php";
+echo "Command: $command\n";
+echo "SafeKeep server starting...\n";
+echo "========================\n\n";
 
-echo "Starting server with command: $command\n";
-echo "SafeKeep is ready!\n";
-echo "---\n";
-
-// Execute the command
-passthru($command);
+// Use exec to replace current process (better for containers)
+exec($command);
 ?>
