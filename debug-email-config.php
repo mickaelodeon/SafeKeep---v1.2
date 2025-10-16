@@ -35,7 +35,7 @@ $settings = [
 foreach ($settings as $name => $setting) {
     echo "<tr>";
     echo "<td style='border: 1px solid #ddd; padding: 10px; font-weight: bold;'>{$name}</td>";
-    echo "<td style='border: 1px solid #ddd; padding: 10px;'>" . htmlspecialchars($setting['value']) . "</td>";
+    echo "<td style='border: 1px solid #ddd; padding: 10px;'>" . htmlspecialchars((string)$setting['value']) . "</td>";
     echo "<td style='border: 1px solid #ddd; padding: 10px;'>{$setting['status']}</td>";
     echo "</tr>";
 }
