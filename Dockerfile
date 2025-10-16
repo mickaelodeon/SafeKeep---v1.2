@@ -36,15 +36,19 @@ COPY . .
 # Install PHP dependencies
 RUN composer install --no-dev --optimize-autoloader --no-interaction
 
-# Create inline startup script that handles PORT properly
+# Copy and setup the Railway wrapper script
+COPY railway-wrapper.sh /usr/local/bin/railway-wrapper.sh
+RUN chmod +x /usr/local/bin/railway-wrapper.sh
+
+# Create a simple launcher script as fallback
 RUN echo '#!/bin/bash\n\
-export PORT=${PORT:-8080}\n\
-echo "SafeKeep starting on port $PORT"\n\
-exec php -S 0.0.0.0:$PORT -t .' > /usr/local/bin/start-safekeep.sh && \
-chmod +x /usr/local/bin/start-safekeep.sh
+PORT=${PORT:-8080}\n\
+echo "SafeKeep launcher - port: $PORT"\n\
+exec php -S 0.0.0.0:$PORT -t .' > /usr/local/bin/safekeep-start.sh && \
+chmod +x /usr/local/bin/safekeep-start.sh
 
-# Expose port (Railway will set the PORT env var)
-EXPOSE $PORT
+# Use the wrapper as entrypoint to intercept Railway's commands
+ENTRYPOINT ["/usr/local/bin/railway-wrapper.sh"]
 
-# Use inline startup script
-CMD ["/usr/local/bin/start-safekeep.sh"]
+# Default command that works
+CMD ["php", "-S", "0.0.0.0:8080", "-t", "."]
