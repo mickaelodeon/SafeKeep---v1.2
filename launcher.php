@@ -22,7 +22,11 @@ foreach ($portSources as $source => $value) {
 
 // Debug database environment variables
 echo "\nDatabase environment variables:\n";
-$dbVars = ['MYSQL_HOST', 'MYSQL_DATABASE', 'MYSQL_USER', 'MYSQL_PASSWORD', 'DB_HOST', 'DB_NAME', 'DB_USER', 'DB_PASS'];
+$dbVars = [
+    'MYSQL_HOST', 'MYSQL_DATABASE', 'MYSQL_USER', 'MYSQL_PASSWORD', 'MYSQL_ROOT_PASSWORD',
+    'MYSQLHOST', 'MYSQLUSER', 'MYSQLDATABASE', 'MYSQLPASSWORD',
+    'RAILWAY_PRIVATE_DOMAIN', 'DB_HOST', 'DB_NAME', 'DB_USER', 'DB_PASS'
+];
 foreach ($dbVars as $var) {
     $value = getenv($var) ?: $_ENV[$var] ?? null;
     echo "  $var: " . ($value ? (strlen($value) > 20 ? substr($value, 0, 20) . '...' : $value) : 'not set') . "\n";
