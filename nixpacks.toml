@@ -9,4 +9,4 @@ nixPkgs = ["php82", "nginx", "bash"]
 cmds = ["composer install --no-dev --optimize-autoloader"]
 
 [start]
-cmd = "php server.php"
+cmd = "php launcher.php"
