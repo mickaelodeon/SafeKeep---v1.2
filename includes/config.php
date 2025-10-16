@@ -78,7 +78,7 @@ class Config
                 'session_lifetime' => (int)self::env('SESSION_LIFETIME', 3600)
             ],
             'school' => [
-                'email_domains' => explode(',', self::env('ALLOWED_EMAIL_DOMAINS', '@school.edu')),
+                'email_domains' => explode(',', self::env('ALLOWED_EMAIL_DOMAINS', '@school.edu,@gmail.com')),
                 'auto_approve_users' => self::env('AUTO_APPROVE_USERS', 'false') === 'true'
             ],
             'uploads' => [
