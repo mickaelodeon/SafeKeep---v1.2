@@ -97,6 +97,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['contact_owner']) || 
                             require_once __DIR__ . '/../includes/Email.php';
                         }
                         
+                        // Set a time limit for email sending
+                        $originalTimeLimit = ini_get('max_execution_time');
+                        set_time_limit(15); // 15 seconds max for email
+                        
                         $emailSubject = "🔍 SafeKeep Alert: Someone is interested in your " . ucfirst($post['type']) . " item";
                         
                         // Create professional HTML email
@@ -219,6 +223,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['contact_owner']) || 
                         
                         $emailSent = Email::send($postOwner['email'], $emailSubject, $emailBody, true);
                         
+                        // Restore original time limit
+                        set_time_limit((int)$originalTimeLimit);
+                        
                         if ($emailSent) {
                             Database::execute("UPDATE contact_logs SET email_sent = 1 WHERE id = ?", [$insertId]);
                         } else {
@@ -228,6 +235,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['contact_owner']) || 
                     
                 } catch (Exception $e) {
                     error_log('SafeKeep: Email error - ' . $e->getMessage());
+                    // Don't let email failures stop the process
+                    $emailSent = false;
                 }
                 
                 if ($emailSent) {

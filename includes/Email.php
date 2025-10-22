@@ -94,6 +94,13 @@ class Email
             $mail->Password = self::$config['password'];
             $mail->SMTPSecure = self::$config['encryption'];
             $mail->Port = self::$config['port'];
+            
+            // Add timeout settings to prevent endless loading
+            $mail->Timeout = 10; // 10 seconds timeout
+            $mail->SMTPKeepAlive = false;
+            
+            // Disable debug output in production
+            $mail->SMTPDebug = SMTP::DEBUG_OFF;
 
             // Recipients
             $mail->setFrom(self::$config['from_email'], self::$config['from_name']);
@@ -115,7 +122,7 @@ class Email
 
         } catch (Exception $e) {
             error_log('PHPMailer Error: ' . $mail->ErrorInfo);
-            return false;
+            throw $e; // Re-throw to trigger fallback
         }
     }
 
