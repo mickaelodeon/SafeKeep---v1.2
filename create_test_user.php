@@ -11,17 +11,17 @@ echo "Hash: $hash\n";
 // Insert test user
 try {
     $result = Database::insert('users', [
-        'full_name' => 'Test User',
-        'email' => 'test@school.edu',
+        'full_name' => 'Test Admin',
+        'email' => 'admin@school.edu',
         'password_hash' => $hash,
-        'role' => 'user',
+        'role' => 'admin',
         'is_active' => 1,
         'email_verified' => 1
     ]);
     
-    echo "Test user created successfully!\n";
+    echo "Test admin created successfully!\n";
     echo "Login credentials:\n";
-    echo "Email: test@school.edu\n";
+    echo "Email: admin@school.edu\n";
     echo "Password: password123\n";
 } catch (Exception $e) {
     echo "Error creating user: " . $e->getMessage() . "\n";
